@@ -7,6 +7,34 @@ import csv
 # TODO: use decimal instead of float
 #  https://stackoverflow.com/questions/19473770/how-to-avoid-floating-point-errors
 
+DEFAULT_COLUMN_ROW_INDEX = {
+    "current_asset": 7,
+    "current_liability": 10,
+    "ncib_debt": 9,  # non-current interest-bearing debt
+    "equity": 12,
+    "ebit": 2,
+    "interest_costs": 3,
+}
+
+ADDITIONAL_ROWS = {
+    "Current Ratio": (
+        (lambda current_asset, current_liability: current_asset / current_liability),
+        "current_asset",
+        "current_liability",
+    ),
+    "Debt to Equity Ratio": (
+        (lambda ncib_debt, equity: ncib_debt / equity),
+        "ncib_debt",
+        "equity",
+    ),
+    "Debt Service Coverage Ratio": (
+        (lambda ebit, interest_costs, ncib_debt: ebit / (interest_costs + ncib_debt)),
+        "ebit",
+        "interest_costs",
+        "ncib_debt",
+    ),
+}
+
 
 @dataclass
 class Row:
@@ -45,39 +73,12 @@ class Year(Enum):
     LAST_YEAR = 2
 
 
-ADDITIONAL_ROWS = {
-    "Current Ratio": (
-        (lambda current_asset, current_liability: current_asset / current_liability),
-        "current_asset",
-        "current_liability",
-    ),
-    "Debt to Equity Ratio": (
-        (lambda ncib_debt, equity: ncib_debt / equity),
-        "ncib_debt",
-        "equity",
-    ),
-    "Debt Service Coverage Ratio": (
-        (lambda ebit, interest_costs, ncib_debt: ebit / (interest_costs + ncib_debt)),
-        "ebit",
-        "interest_costs",
-        "ncib_debt",
-    ),
-}
-
-
 class Table:
     def __init__(self, row_name_index_dict=None, rows=None):
         self.rows: list[Row] = rows or []
         self.current_asset_row_index = 7
         self.current_liability_row = 10
-        self.row_name_index_dict = {
-            "current_asset": 7,
-            "current_liability": 10,
-            "ncib_debt": 9,  # non-current interest-bearing debt
-            "equity": 12,
-            "ebit": 2,
-            "interest_costs": 3,
-        }
+        self.row_name_index_dict = row_name_index_dict or DEFAULT_COLUMN_ROW_INDEX
 
     def get_values_from_lambda_tuple(self, lambda_func, *column_names):
         current_year_res = lambda_func(
@@ -118,29 +119,6 @@ class Table:
 
     def add_row(self, row: Row):
         self.rows.append(row)
-
-    # def add_current_ratio_row(self):
-    #     row_name = "Current Ratio"
-    #     try:
-    #         current_year_asset = self.get_row_value_by_name("current_asset", Year.CURRENT_YEAR)
-    #         current_year_liability = self.get_row_value_by_name("current_liability", Year.CURRENT_YEAR)
-    #
-    #         last_year_asset = self.get_row_value_by_name("current_asset", Year.LAST_YEAR)
-    #         last_year_liability = self.get_row_value_by_name("current_liability", Year.LAST_YEAR)
-    #         print(f"current_year_asset {current_year_asset} \n current_year_liability {current_year_liability} \n,"
-    #               f"last_year_asset {last_year_asset}, \n last_year_liability{last_year_liability}" )
-    #
-    #
-    #         self.rows.append(
-    #             Row(
-    #                 row_name,
-    #                 current_year_asset / current_year_liability,
-    #                 last_year_asset / last_year_liability,
-    #             )
-    #         )
-    #     except Exception as e:
-    #         print(f"failed to produce add_current_ratio_row, error: {e}")
-    #         print(f"self length {len(self.rows)}")
 
 
 def analyse_file(input_csv_file_name, delimiter=",", output_csv_file_name=None):
