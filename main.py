@@ -53,7 +53,6 @@ ADDITIONAL_ROWS = {
 }
 
 
-
 TXT_SECTION_NAME_TO_COLUMN_NAME = {
     "Revenue": "revenue",
     "Profit": "profit",
@@ -67,10 +66,15 @@ TXT_SECTION_NAME_TO_COLUMN_NAME = {
         "Debt-to-equity ratio": "dte_ratio",
         "Debt service coverage ratio": "dsc_ratio",
     },
-    "Cash flows": "cash_flow"
+    "Cash flows": "cash_flow",
 }
 
-SECTION_WITH_UNIT = ["Revenue", "Profit", "Assets, Liabilities and Equity", "Cash flows"]
+SECTION_WITH_UNIT = [
+    "Revenue",
+    "Profit",
+    "Assets, Liabilities and Equity",
+    "Cash flows",
+]
 
 
 FIELD_FORMATTING_FUNCTIONS = {
@@ -180,7 +184,11 @@ class Table:
 
 
 def generate(
-    file, table: Table, structure_dict=TXT_SECTION_NAME_TO_COLUMN_NAME, inner=False, is_unit=False
+    file,
+    table: Table,
+    structure_dict=TXT_SECTION_NAME_TO_COLUMN_NAME,
+    inner=False,
+    is_unit=False,
 ):
     for index, (section_name, column_name) in enumerate(structure_dict.items()):
         prefix = "" if inner else f"{chr(index + ord('a'))}) "
