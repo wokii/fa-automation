@@ -3,9 +3,13 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 import csv
+import re
 
 # TODO: use decimal instead of float
 #  https://stackoverflow.com/questions/19473770/how-to-avoid-floating-point-errors
+
+CURRENCY = "$"
+UNIT = "m"  # k, m, b
 
 DEFAULT_COLUMN_ROW_INDEX = {
     "current_asset": 7,
@@ -15,7 +19,16 @@ DEFAULT_COLUMN_ROW_INDEX = {
     "ebit": 2,
     "interest_costs": 3,
     "debt_service_of_principal": 12,
+    "revenue": 1,
+    "profit": 4,
+    "assets": 8,
+    "liabilities": 11,
+    "current_ratio": None,
+    "dte_ratio": None,
+    "dsc_ratio": None,
 }
+
+FIELD_WITH_UNIT = []
 
 ADDITIONAL_ROWS = {
     "Current Ratio": (
@@ -38,6 +51,38 @@ ADDITIONAL_ROWS = {
         "debt_service_of_principal",
     ),
 }
+
+TXT_SECTION_NAME_TO_COLUMN_NAME = {
+    "Revenue": "revenue",
+    "Profit": "profit",
+    "Assets, Liabilities and Equity": {
+        "Assets": "assets",
+        "Liabilities": "liabilities",
+        "Equity": "equity",
+    },
+    "Current ratio": "current_ratio",
+    "Debt-to-equity and debt service coverage": {
+        "Debt-to-equity ratio": "dte_ratio",
+        "Debt service coverage ratio": "dsc_ratio",
+    },
+}
+
+FIELD_FORMATTING_FUNCTIONS = {
+    "ratio": lambda x: "{:.2%}".format(x) if x else "",
+    "difference": lambda x: "{:.2f}".format(x) if x else "",
+    "current_year": lambda x: remove_tail_dot_zeros("{:,.2f}".format(x)) if x else "",
+    "last_year": lambda x: remove_tail_dot_zeros("{:,.2f}".format(x)) if x else "",
+}
+
+COMPANY_NAME = "Wokki Company"
+CURRENT_YEAR_NUMBER = 2023
+LAST_YEAR_NUMBER = 2022
+
+tail_dot_rgx = re.compile(r"(?:(\.)|(\.\d*?[1-9]\d*?))0+(?=\b|[^0-9])")
+
+
+def remove_tail_dot_zeros(a):
+    return tail_dot_rgx.sub(r"\2", a)
 
 
 @dataclass
@@ -87,13 +132,13 @@ class Table:
     def get_values_from_lambda_tuple(self, lambda_func, *column_names):
         current_year_res = lambda_func(
             *[
-                self.get_row_value_by_name(column_name, Year.CURRENT_YEAR)
+                self.get_row_by_name(column_name).current_year
                 for column_name in column_names
             ]
         )
         last_year_res = lambda_func(
             *[
-                self.get_row_value_by_name(column_name, Year.LAST_YEAR)
+                self.get_row_by_name(column_name).last_year
                 for column_name in column_names
             ]
         )
@@ -112,25 +157,44 @@ class Table:
                 print("error while lambda_tuple:", lambda_tuple)
                 self.rows.append(Row(column_name, "", ""))
 
-    def get_row_value_by_name(self, row_name: str, year: Year):
-        row_index = self.row_name_index_dict[row_name]
+            # populate the index for report
+            if column_name == "Current Ratio":
+                DEFAULT_COLUMN_ROW_INDEX["current_ratio"] = len(self.rows) - 1
+            elif column_name == "Debt to Equity Ratio":
+                DEFAULT_COLUMN_ROW_INDEX["dte_ratio"] = len(self.rows) - 1
+            elif column_name == "Debt Service Coverage Ratio":
+                DEFAULT_COLUMN_ROW_INDEX["dsc_ratio"] = len(self.rows) - 1
 
-        if year is Year.LAST_YEAR:
-            return self.rows[row_index].last_year
-        elif year is Year.CURRENT_YEAR:
-            return self.rows[row_index].current_year
-        else:
-            raise Exception("unsupported year type in get_row_value_by_name")
+    def get_row_by_name(self, row_name: str) -> Row:
+        row_index = self.row_name_index_dict[row_name]
+        return self.rows[row_index]
 
     def add_row(self, row: Row):
         self.rows.append(row)
 
 
+def generate(
+    file, table: Table, structure_dict=TXT_SECTION_NAME_TO_COLUMN_NAME, inner=False
+):
+    for index, (section_name, column_name) in enumerate(structure_dict.items()):
+        prefix = "" if inner else f"{chr(index + ord('a'))}) "
+        file.write(f"{prefix}{section_name} \n")
+        if isinstance(column_name, str):
+            current_year_value = table.get_row_by_name(column_name).current_year
+            last_year_value = table.get_row_by_name(column_name).last_year
+            difference = table.get_row_by_name(column_name).difference
+            ratio = table.get_row_by_name(column_name).ratio
+            file.write(
+                f"{COMPANY_NAME} has been an {'increase' if difference >= 0 else 'decrease'} in revenue in "
+                f"{LAST_YEAR_NUMBER} of {CURRENCY}{FIELD_FORMATTING_FUNCTIONS['difference'](difference)}({FIELD_FORMATTING_FUNCTIONS['ratio'](ratio)}) from "
+                f"{CURRENCY}{FIELD_FORMATTING_FUNCTIONS['last_year'](last_year_value)} to {CURRENCY}{FIELD_FORMATTING_FUNCTIONS['current_year'](current_year_value)}. "
+                f"The key factor[s] driving this movement is[are]: \n \n"
+            )
+        elif isinstance(column_name, dict):
+            generate(file, table, column_name, inner=True)
+
+
 def analyse_file(input_csv_file_name, delimiter=",", output_csv_file_name=None):
-    field_formatting_functions = {
-        "ratio": lambda x: "{:.2%}".format(x) if x else "",
-        "difference": lambda x: "{:.2f}".format(x) if x else "",
-    }
     table = Table()
     with open(input_csv_file_name, newline="") as csvfile:
         reader = csv.DictReader(csvfile)
@@ -145,19 +209,22 @@ def analyse_file(input_csv_file_name, delimiter=",", output_csv_file_name=None):
         or f"result_{datetime.date.today().strftime('%m-%d-%y')}.csv",
         "w",
         newline="",
-    ) as result_csv, open(
-        f"result_{datetime.date.today().strftime('%m-%d-%y')}.csv", "w"
-    ) as result_txt:
+    ) as result_csv:
         fieldnames = list(r.__dict__.keys())
         writer = csv.DictWriter(result_csv, fieldnames=fieldnames)
         writer.writeheader()
 
         for row in table.rows:
             row_dict = {
-                k: field_formatting_functions.get(k, lambda x: x)(v)
+                k: FIELD_FORMATTING_FUNCTIONS.get(k, lambda x: x)(v)
                 for k, v in row.__dict__.items()
             }
             writer.writerow(row_dict)
+
+    with open(
+        f"result_{datetime.date.today().strftime('%m-%d-%y')}.txt", "w"
+    ) as result_txt:
+        generate(result_txt, table)
 
 
 analyse_file("sample.csv")
