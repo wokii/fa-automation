@@ -23,12 +23,12 @@ DEFAULT_COLUMN_ROW_INDEX = {
     "profit": 4,
     "assets": 8,
     "liabilities": 11,
+    "cash_flow": 15,
     "current_ratio": None,
     "dte_ratio": None,
     "dsc_ratio": None,
 }
 
-FIELD_WITH_UNIT = []
 
 ADDITIONAL_ROWS = {
     "Current Ratio": (
@@ -52,6 +52,8 @@ ADDITIONAL_ROWS = {
     ),
 }
 
+
+
 TXT_SECTION_NAME_TO_COLUMN_NAME = {
     "Revenue": "revenue",
     "Profit": "profit",
@@ -65,7 +67,11 @@ TXT_SECTION_NAME_TO_COLUMN_NAME = {
         "Debt-to-equity ratio": "dte_ratio",
         "Debt service coverage ratio": "dsc_ratio",
     },
+    "Cash flows": "cash_flow"
 }
+
+SECTION_WITH_UNIT = ["Revenue", "Profit", "Assets, Liabilities and Equity", "Cash flows"]
+
 
 FIELD_FORMATTING_FUNCTIONS = {
     "ratio": lambda x: "{:.2%}".format(x) if x else "",
@@ -174,24 +180,30 @@ class Table:
 
 
 def generate(
-    file, table: Table, structure_dict=TXT_SECTION_NAME_TO_COLUMN_NAME, inner=False
+    file, table: Table, structure_dict=TXT_SECTION_NAME_TO_COLUMN_NAME, inner=False, is_unit=False
 ):
     for index, (section_name, column_name) in enumerate(structure_dict.items()):
         prefix = "" if inner else f"{chr(index + ord('a'))}) "
         file.write(f"{prefix}{section_name} \n")
+        need_unit = is_unit or section_name in SECTION_WITH_UNIT
+
         if isinstance(column_name, str):
             current_year_value = table.get_row_by_name(column_name).current_year
             last_year_value = table.get_row_by_name(column_name).last_year
             difference = table.get_row_by_name(column_name).difference
             ratio = table.get_row_by_name(column_name).ratio
+            currency = CURRENCY if need_unit else ""
+            unit = UNIT if need_unit else ""
             file.write(
-                f"{COMPANY_NAME} has been an {'increase' if difference >= 0 else 'decrease'} in revenue in "
-                f"{LAST_YEAR_NUMBER} of {CURRENCY}{FIELD_FORMATTING_FUNCTIONS['difference'](difference)}({FIELD_FORMATTING_FUNCTIONS['ratio'](ratio)}) from "
-                f"{CURRENCY}{FIELD_FORMATTING_FUNCTIONS['last_year'](last_year_value)} to {CURRENCY}{FIELD_FORMATTING_FUNCTIONS['current_year'](current_year_value)}. "
-                f"The key factor[s] driving this movement is[are]: \n \n"
+                f"{COMPANY_NAME} has been {'an increase' if difference >= 0 else 'a decrease'} in {section_name.lower()} in "
+                f"{LAST_YEAR_NUMBER} of {currency}{FIELD_FORMATTING_FUNCTIONS['difference'](difference)}{unit}({FIELD_FORMATTING_FUNCTIONS['ratio'](ratio)}) from "
+                f"{currency}{FIELD_FORMATTING_FUNCTIONS['last_year'](last_year_value)}{unit} to {currency}{FIELD_FORMATTING_FUNCTIONS['current_year'](current_year_value)}{unit}. "
+                f"The key factors driving this movement are: \n \n"
             )
+            if ratio > 1:
+                file.write("!!! ratio > 1.0, NEED MORE EXPLANATION")
         elif isinstance(column_name, dict):
-            generate(file, table, column_name, inner=True)
+            generate(file, table, column_name, inner=True, is_unit=need_unit)
 
 
 def analyse_file(input_csv_file_name, delimiter=",", output_csv_file_name=None):
