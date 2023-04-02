@@ -11,9 +11,10 @@ DEFAULT_COLUMN_ROW_INDEX = {
     "current_asset": 7,
     "current_liability": 10,
     "ncib_debt": 9,  # non-current interest-bearing debt
-    "equity": 12,
+    "equity": 13,
     "ebit": 2,
     "interest_costs": 3,
+    "debt_service_of_principal": 12,
 }
 
 ADDITIONAL_ROWS = {
@@ -28,10 +29,13 @@ ADDITIONAL_ROWS = {
         "equity",
     ),
     "Debt Service Coverage Ratio": (
-        (lambda ebit, interest_costs, ncib_debt: ebit / (interest_costs + ncib_debt)),
+        (
+            lambda ebit, interest_costs, debt_service_of_principal: ebit
+            / (interest_costs + debt_service_of_principal)
+        ),
         "ebit",
         "interest_costs",
-        "ncib_debt",
+        "debt_service_of_principal",
     ),
 }
 
@@ -105,6 +109,7 @@ class Table:
                 self.rows.append(Row(column_name, current_year_value, last_year_value))
             except Exception as e:
                 print(f"error while generate_additional_rows {column_name}, e {e}")
+                print("error while lambda_tuple:", lambda_tuple)
                 self.rows.append(Row(column_name, "", ""))
 
     def get_row_value_by_name(self, row_name: str, year: Year):
@@ -129,19 +134,12 @@ def analyse_file(input_csv_file_name, delimiter=",", output_csv_file_name=None):
     table = Table()
     with open(input_csv_file_name, newline="") as csvfile:
         reader = csv.DictReader(csvfile)
-        # print(list(spamreader))
         for row in reader:
-            print("reading, row", row)
             r = Row(*row.values())
-            print("*row.values()", *row.values())
-            print("processed row", r)
             table.add_row(r)
-            # print(r)
-            # print(r.__dict__)
 
     table.generate_additional_rows()
 
-    print("fieldanmes: ", list(r.__dict__.keys()))
     with open(
         output_csv_file_name
         or f"result_{datetime.date.today().strftime('%m-%d-%y')}.csv",
@@ -163,10 +161,3 @@ def analyse_file(input_csv_file_name, delimiter=",", output_csv_file_name=None):
 
 
 analyse_file("sample.csv")
-
-# def test_row():
-#     row_0 = Row("total_asset", 200, 50)
-#     print(row_0)
-#
-#
-# test_row()
